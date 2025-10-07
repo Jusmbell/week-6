@@ -1,10 +1,10 @@
-# built-in
+# built-in / stdlib imports
 import requests
 import os
 from multiprocessing import Pool
 from time import sleep
 
-# user-installed
+# third-party imports
 import pandas as pd
 from tqdm import tqdm
 from numpy.random import uniform
@@ -13,26 +13,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # constants
-ACCESS_TOKEN = os.environ['iLgX5KDPdNtFbilnP8qVKY_d7CcESB-6p-aL9a8c0JkM3MNDtW5GnkZY54a8GHp-']
+# STATIC TOKEN (per user request). In real projects prefer environment vars.
+ACCESS_TOKEN = "iLgX5KDPdNtFbilnP8qVKY_d7CcESB-6p-aL9a8c0JkM3MNDtW5GnkZY54a8GHp-"
 NAME_DEMO = __name__
 
 def genius(search_term, per_page=15):
-    """
-    Collect data from the Genius API by searching for `search_term`.
-    
-    **Assumes ACCESS_TOKEN is loaded in environment.**
+    """Search Genius for a term and return the raw ``hits`` list.
 
-    Parameters
-    ----------
-    search_term : str
-        The name of an artist, album, etc.
-    per_page : int, optional
-        Maximum number of results to return, by default 15
-
-    Returns
-    -------
-    list
-        All the hits which match the search criteria.
+    This mirrors the class method logic but keeps things inline. We construct
+    the URL manually instead of using a Session object for simplicity here.
     """
     genius_search_url = f"http://api.genius.com/search?q={search_term}&" + \
                         f"access_token={ACCESS_TOKEN}&per_page={per_page}"
@@ -42,65 +31,41 @@ def genius(search_term, per_page=15):
     
     return json_data['response']['hits']
 
-def genius_to_df(search_term, n_results_per_term=10, 
-                 verbose=True, savepath=None):
-    """
-    Generate a pandas.DataFrame from a single call to the Genius API.
+def genius_to_df(search_term, n_results_per_term=10, verbose=True, savepath=None):
+    """Return a flattened DataFrame for one search term.
 
-    Parameters
-    ----------
-    search_term : str
-        Genius search term
-    n_results_per_term : int, optional
-        Number of results "per_page" for each search term provided, by default 10
-
-    Returns
-    -------
-    pandas.DataFrame
-        The final DataFrame containing the results. 
+    Steps:
+    1. Call :func:`genius` to get raw hits JSON.
+    2. Pull the nested ``result`` dict for each hit.
+    3. Expand the nested ``stats`` and ``primary_artist`` sub-dicts into columns.
+    4. Optionally save to disk.
     """
     json_data = genius(search_term, per_page=n_results_per_term)
     hits = [hit['result'] for hit in json_data]
     df = pd.DataFrame(hits)
 
-    # expand dictionary elements
+    # Expand nested dictionaries into top-level columns (wide format).
     df_stats = df['stats'].apply(pd.Series)
-    df_stats.rename(columns={c:'stat_' + c for c in df_stats.columns},
-                    inplace=True)
-    
+    df_stats.rename(columns={c: 'stat_' + c for c in df_stats.columns}, inplace=True)
+
     df_primary = df['primary_artist'].apply(pd.Series)
-    df_primary.rename(columns={c:'primary_artist_' + c 
-                               for c in df_primary.columns},
-                      inplace=True)
-    
+    df_primary.rename(columns={c: 'primary_artist_' + c for c in df_primary.columns}, inplace=True)
+
     df = pd.concat((df, df_stats, df_primary), axis=1)
-    
+
     if verbose:
         print(f'PID: {os.getpid()} ... search_term:', search_term)
         print(f"Data gathered for {search_term}.")
 
-    # this is a good practice for numerous automated data pulls ...
     if savepath:
-        df.to_csv(savepath + '/genius-{searchname}.csv', 
-                  index=False)
+        df.to_csv(f"{savepath}/genius-{search_term}.csv", index=False)
 
     return df
 
 def genius_to_dfs(search_terms, **kwargs):
-    """
-    Generate a pandas.DataFrame from multiple calls to the Genius API.
+    """Loop over many terms and concatenate their per-term DataFrames.
 
-    Parameters
-    ----------
-    search_terms : list of strings
-        List of artists (say) to search in Genius.
-    
-    **kwargs : arguments passed to genius_api.genius_to_df
-
-    Returns
-    -------
-    pandas.DataFrame
-        The final DataFrame containing the results. 
+    Accepts the same keyword arguments as :func:`genius_to_df` (forwarded).
     """
 
     dfs = []
@@ -115,74 +80,13 @@ def genius_to_dfs(search_terms, **kwargs):
     return pd.concat(dfs)
 
 def testing():
+    """Tiny smoke test to show the module executed."""
     print('Testing 1, 2, 3 ...')
     return None
 
 def job_test(num, mult=2):
+    """Example function for demonstrating multiprocessing patterns."""
     print(f'PID: {os.getpid()} ... num:', num)
     sleep(uniform(0.5, 1.5))
     return num * mult
-
-
-# print("__name__ is", __name__)
-if __name__ == "__main__":
-
-    # ------------------------------------
-    #   SIMPLE EXAMPLE
-    # ------------------------------------
-    testing()
-
-    # ------------------------------------
-    #   DATA COLLECTION EXAMPLE
-    # ------------------------------------
-
-    # search_terms = ['The Beatles', 
-    #                 'Missy Elliot', 
-    #                 'Andy Shauf', 
-    #                 'Slowdive', 
-    #                 'Men I Trust']
-    
-    # n_results_per_term = 10
-
-    # df_genius = genius_to_dfs(search_terms, 
-    #                           n_results_per_term=n_results_per_term,
-    #                           verbose=False)
-
-    # df_genius.to_csv('./data/genius_data.csv')
-
-    # ------------------------------------
-    #   SIMPLE MULTIPROCESSING EXAMPLE
-    # ------------------------------------
-
-    # with Pool(4) as p:
-    #     results = p.map(job_test, [1, 2, 3, 4])
-    #     print("\nFinal results:\n", results)
-
-    # ------------------------------------
-    #   API MULTIPROCESSING EXAMPLE
-    # ------------------------------------
-
-    # search_terms = ['The Beatles', 
-    #                 'Missy Elliot', 
-    #                 'Andy Shauf', 
-    #                 'Slowdive', 
-    #                 'Men I Trust']
-    
-    # # (optional) if you need to pass multiple arguments
-    # n = 20
-
-    #  # then "unpack" `args` within the function (e.g., args[0])
-    # args = [(t, n) for t in search_terms]
-
-    # with Pool(8) as p:
-    #     results = p.map(genius_to_df, search_terms)
-    #     print("\n Total number of results: ", len(results))
-
-    # df_genius = pd.concat(results)
-
-    # df_genius.to_csv('./data/genius_data_mp.csv', index=False)
-
-    
-
-
 
