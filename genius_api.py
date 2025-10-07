@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # constants
-ACCESS_TOKEN = os.environ['ACCESS_TOKEN']
+ACCESS_TOKEN = os.environ['iLgX5KDPdNtFbilnP8qVKY_d7CcESB-6p-aL9a8c0JkM3MNDtW5GnkZY54a8GHp-']
 NAME_DEMO = __name__
 
 def genius(search_term, per_page=15):
